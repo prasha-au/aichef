@@ -1,0 +1,20 @@
+.landing .main-title {
+  margin-bottom: 2rem;
+}
+
+.landing {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.landing .chat-form {
+  min-width: 30vw;
+  gap: 0.5rem;
+}
+

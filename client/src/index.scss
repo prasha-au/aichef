@@ -1,0 +1,26 @@
+@import 'bootstrap/scss/bootstrap';
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: #111;
+}
+
+.background-div {
+  background: url('./assets/background.jpg') center center/cover no-repeat;
+  position: fixed;
+  top: -5px;
+  left: -5px;
+  bottom: -5px;
+  right: -5px;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(6px);
+}
+
+.background-div:after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+}

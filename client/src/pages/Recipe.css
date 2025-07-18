@@ -1,0 +1,39 @@
+
+.recipe-page {
+  position: relative;
+  z-index: 1;
+}
+
+.recipe-flex {
+  display: flex;
+  flex-direction: row;
+  height: 90vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.recipe-left {
+  height: 100%;
+  width: 100%;
+  flex-grow: 1;
+}
+
+.recipe-right {
+  min-width: 500px;
+  flex-grow: 0;
+}
+
+.recipe-json {
+  height: 100%;
+  overflow: auto;
+}
+
+
+.recipe-info-link {
+  text-decoration: none;
+  font-size: 1.1em;
+  vertical-align: middle;
+  display: inline-flex;
+  align-items: center;
+}
+

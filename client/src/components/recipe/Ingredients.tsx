@@ -27,7 +27,7 @@ export default function Ingredients({ ingredientGroups }: IngredientsProps) {
             {group.ingredients.map((ing, i) => {
               const key = checkboxKey(group, ing);
               const toggleChecked = () => setChecked(c => ({...c, [key]:!c[key]}));
-              const handleSub = () => submitChatMessage(`I want to substitute ${ing.name}`);
+              const handleSub = () => submitChatMessage(`Can you suggest a substitute for "${ing.name}"?`);
               return (
                 <div className="form-check align-items-center mb-1" key={i}>
                   <input type="checkbox" className="form-check-input me-2" checked={!!checked[key]} onChange={toggleChecked} id={`ing-check-${gi}-${i}`} />

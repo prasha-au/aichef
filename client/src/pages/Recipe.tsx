@@ -12,7 +12,6 @@ export default function Recipe() {
   const [searchParams] = useSearchParams();
   const recipeUrl = searchParams.get('url');
 
-  // const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,8 +61,9 @@ export default function Recipe() {
                 </div>
               </div>
             )}
-
-            <pre className="recipe-json bg-dark text-white rounded p-3 border border-secondary">{JSON.stringify(recipe, null, 2)}</pre>
+            <pre className="recipe-json bg-dark text-white rounded p-3 border border-secondary" style={{ whiteSpace: 'pre-wrap' }}>
+              {JSON.stringify(recipe, null, 2)}
+            </pre>
           </div>
           <div className="recipe-right p-4">
             <Chat additionalContext={{ recipe }} />

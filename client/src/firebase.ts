@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 
 const firebaseConfig = {
@@ -11,6 +12,7 @@ const firebaseConfig = {
 } as const;
 
 const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
 const functions = getFunctions(app);
 
 connectFunctionsEmulator(functions, "localhost", 5001);

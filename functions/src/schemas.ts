@@ -11,19 +11,20 @@ export const IngredientSchema = z.object({
 export const RecipeSchema = z.object({
   title: z.string(),
   description: z.string(),
+  image: z.string().nullable(),
   ingredientGroups: z.array(
     z.object({
-      heading: z.string().optional().default(''),
+      heading: z.string().nullable(),
       ingredients: z.array(IngredientSchema)
     })
   ),
   instructions: z.array(
     z.object({
-      heading: z.string().optional().default(''),
+      heading: z.string().nullable(),
       steps: z.array(z.string()),
     })
   ),
-  notes: z.array(z.string()).optional().nullable(),
+  notes: z.array(z.string()).default([]),
   url: z.string(),
 });
 

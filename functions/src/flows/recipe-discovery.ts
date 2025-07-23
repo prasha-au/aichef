@@ -1,28 +1,38 @@
 import {z} from "genkit/beta";
-import { gemini20FlashLite } from '@genkit-ai/googleai';
+import { gemini, gemini20FlashLite } from '@genkit-ai/googleai';
 import { retriever, ai, googleCustomSearchKey, googleCustomSearchCtx, recipeIndexConfig, firestore } from '../globals';
 import * as cheerio from 'cheerio';
+import { IngredientSchema, RecipeSchema, RecipeSearchResultsSchema } from '../schemas';
 import { FieldValue } from 'firebase-admin/firestore';
-import { RecipeSchema, RecipeSearchResultsSchema } from '../schemas';
 
 
 
-const RawReciepeExtractorSchema = z.object({
-  title: z.string(),
-  description: z.string(),
-  ingredientGroups: z.array(
-    z.object({
-      heading: z.string().optional(),
-      ingredients: z.array(z.string()),
-    })
-  ),
-  instructions: z.array(
-    z.object({
-      heading: z.string().optional(),
-      steps: z.array(z.string()),
-    })
-  ),
-  notes: z.array(z.string()).optional().default([]),
+const convertUnitsTool = ai.defineTool({
+  name: 'convertUnits',
+  description: 'Converts a list of ingredient quantity and units to a different unit.',
+  inputSchema: z.object({
+    ingredients: z.array(z.object({
+      amount: z.number().describe('The quantity of the ingredient as a decimal number'),
+      unit: z.enum(['pound', 'ounce']).describe('The unit of the ingredient'),
+    })),
+  }),
+  outputSchema: z.array(z.object({
+    convertedAmount: z.number().describe('The quantity of the ingredient as a decimal number'),
+    convertedUnit: IngredientSchema.shape.unit.describe('The converted unit of the ingredient'),
+  })),
+}, async (input) => {
+  return input.ingredients.map(ingredient => {
+    const { amount, unit } = ingredient;
+    console.log(`Converting ${amount} ${unit}`);
+    switch (unit) {
+      case 'pound':
+        return { convertedAmount: amount * 0.453592, convertedUnit: 'kilogram' as const };
+      case 'ounce':
+        return { convertedAmount: amount * 0.0283495, convertedUnit: 'milliliter' as const };
+      default:
+        throw new Error(`Unknown unit: ${unit}`);
+    }
+  });
 });
 
 
@@ -43,63 +53,56 @@ export const getRecipeFromUrlTool = ai.defineTool(
 
     const docId = `${url.hostname}__${url.pathname.replace(/^\/+|\/+$/g, '').replace(/\//g, '_')}`;
 
-
     const existing = await firestore.collection('recipes').doc(docId).get();
     if (existing.exists) {
       console.log(`Recipe already exists in DB: ${docId}`);
       return JSON.parse(existing.data()![recipeIndexConfig.contentField]);
     }
 
-
-    const webContentRaw = await (await fetch(simpleUrl)).text();
+    const webResult = await fetch(simpleUrl);
+    if (!webResult.ok) {
+      throw new Error(`Failed to fetch recipe from ${simpleUrl}: ${webResult.statusText}`);
+    }
+    const webContentRaw = await webResult.text();
     const $ = cheerio.load(webContentRaw);
-    const recipeContent = $('.wprm-recipe').first().html() ?? webContentRaw;
+    const recipeContent = $('.wprm-recipe').first().html() ?? $('[itemType="http://schema.org/Recipe"]').html() ?? $('main').html() ?? $('#main').html() ?? '';
+    if (!recipeContent) {
+      throw new Error(`Could not select recipe content from ${simpleUrl}.`);
+    }
 
+    const recipeParseRes = await ai.generate({
+      config: { temperature: 0.0, topP: 0.0, seed: 0 },
+      model: gemini('gemini-2.5-pro'),
+      system: `
+        You are a HTML recipe data extractor.
+        You **ONLY** task is to extract the recipe data from the provided raw HTML content.
 
-    console.log(`Parsing recipe content`);
+        You **MUST** extract details from the HTML content using the following rules:
+        - Do not rephrase, summarize, reinterpret, reorder or modify the content in any way.
+        - Ignore content from user comments or reviews sections.
+        - If the ingredients or instructions are in a section without a heading then just leave it empty.
+        - If ingredient notes have been styled to read alongside the ingredient you can strip those characters (eg. "*", ",", "(note)").
+        - Always use metric ingredients where possible. If a metric unit is not specified, call the 'convertUnits' tool before attempting a conversion yourself.
+        - Attempt to strip out any resizing query parameters from the image URL.
 
-    const reciepeRawRes = await ai.generate({
-      config: { temperature: 0.0, topP: 0.0 },
-      prompt: `
-        You are a HTML recipe data extractor. Your only task is to pull out reciepe data from the provided HTML content.
-        Do not rephrase, summarize, interpret, reorder or modify the text in any way.
-
-        Content:"""
-        ${recipeContent}
-        """
+        If you are unable to parse the recipe you **MUST** set the 'convertError' field to a description of the error.
         `,
-        output: { schema: RawReciepeExtractorSchema },
+        prompt: recipeContent,
+        output: { schema: z.object({
+          result:  RecipeSchema.omit({ url: true }).nullable().describe('The parsed recipe data'),
+          convertError: z.string().default('').describe('Any error that occurred while converting units'),
+        }) },
+        tools: [convertUnitsTool],
       });
-      const reciepeRaw = reciepeRawRes.output!;
+    const recipe = recipeParseRes.output!.result;
 
 
-    console.log(`Converting ingredients`);
+    if (!recipe) {
+      console.log(recipeParseRes.output);
+      throw new Error(`Agent failed to parse recipe from ${simpleUrl}: ${recipeParseRes.output?.convertError ?? 'Unknown error'}`);
+    }
 
-    const ingredientsRes = await ai.generate({
-      model: gemini20FlashLite,
-      config: { temperature: 0.0, topP: 0.0 },
-      prompt: `
-        You are an ingredients extractor. Your only task is to convert the input schema to the output schema.
-        Try to keep the name simple and put alternative values in the notes field.
-
-        Input value (JSON): """
-        ${JSON.stringify(reciepeRaw.ingredientGroups)}
-        """
-      `,
-      output: { schema: RecipeSchema.shape.ingredientGroups },
-    });
-    const convertedIngredients = ingredientsRes.output!;
-
-
-    console.log(`Storing in DB`);
-
-
-    const recipeToStore = {
-      ...reciepeRaw,
-      ingredientGroups: convertedIngredients,
-      instructions: reciepeRaw.instructions.map((inst) => ({ heading: '', ...inst })),
-      url: simpleUrl,
-    };
+    const recipeToStore = { ...recipe, url: simpleUrl };
 
     const embeddingValue = await ai.embed({
       embedder: recipeIndexConfig.embedder,
@@ -130,34 +133,37 @@ const searchWebForRecipesTool = ai.defineTool({
   }),
   outputSchema: z.array(RecipeSearchResultsSchema),
 }, async (input) => {
-  const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${googleCustomSearchKey.value()}&cx=${googleCustomSearchCtx.value()}&exactTerms=recipe&num=${input.limit ?? 10}&q=${encodeURIComponent(input.query)}`;
-  const webResponse = await (await fetch(searchUrl)).json();
-
-  type WebSearchResult = Omit<z.infer<typeof RecipeSearchResultsSchema>, 'source'>;
-
-  const rawResults: WebSearchResult[] = webResponse.items.map(({ title, formattedUrl, pagemap }: Record<string, any>) => {
-    return { title, url: formattedUrl, summary: pagemap['metatags'][0]['og:description'] };
-  });
+  const searchParams = new URLSearchParams({
+    key: googleCustomSearchKey.value(),
+    cx: googleCustomSearchCtx.value(),
+    exactTerms: 'recipe',
+    num: input.limit.toString(),
+    safe: 'active',
+    q: input.query,
+  })
+  const url = new URL(`https://www.googleapis.com/customsearch/v1?${searchParams.toString()}`);
+  const webResponse = await (await fetch(url.toString())).json();
 
   const response = await ai.generate({
     model: gemini20FlashLite,
-    prompt: `
-      Clean the JSON list of recipes below by:
-      - Excluding any results that have irrelvant data.
-      - Excluding any social media sites like Facebook, Instagram, etc.
-      - Removing the website name from the title.
-      - Editing the summary so it is a couple of concise sentences if required.
-
-      """json
-      ${JSON.stringify(rawResults)}
-      """
+    system: `
+      You are a search results parser for recipes.
+      Your only task is to parse raw search results from the Google Custom Search API and return a list of recipe search results.
+      You **MUST** follow the rules below:
+      - Exclude any results that have irrelevant data.
+      - Exclude any social media sites like Facebook, Instagram, etc.
+      - Remove the website name from the title.
+      - Edit the summary so it is a couple of concise sentences.
+      - Use the og:description tag for the summary if it exists and is relevant.
+      - Exclude any results that fail to parse.
+      - Set the source field to 'web' for all results.
     `,
-    output: { schema: z.array(RecipeSearchResultsSchema.omit({ source: true })) },
+    prompt: JSON.stringify({ query: input.query, results: webResponse.items }),
+    output: { schema: z.array(RecipeSearchResultsSchema) },
     config: { temperature: 0.2 },
   });
 
-  return (response.output ?? rawResults).map(item => ({ ...item, source: 'web' as const }));
-
+  return response.output ?? [];
 });
 
 

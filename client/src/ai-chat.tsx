@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
 import { getSessionInfo, queryReply, type Recipe, type SearchRecipesResult } from './firebase';
 import { create } from 'zustand'
+import { FirebaseError } from 'firebase/app';
 
 export interface HistoryItem {
-  role: 'user' | 'ai';
+  role: 'user' | 'ai' | 'error';
   text?: string;
 }
 
@@ -19,10 +20,11 @@ interface AiChatStore {
   history: HistoryItem[];
   chatState: ChatState;
   isLoading: boolean;
-  context: Record<string, unknown>
+  context: Record<string, unknown>;
   submitChatMessage: (value: string, additionalContext?: Record<string, unknown>) => Promise<void>;
   setSession: (sessionId: string, isNew?: boolean) => void;
   setChatStateProperty: <K extends keyof ChatState>(prop: K, newValue: ChatState[K]) => void;
+  retryLastMessage: () => void;
 }
 
 
@@ -32,16 +34,16 @@ const useAiStore = create<AiChatStore>((set, get) => ({
   chatState: {},
   history: [
     // { role: 'user', text: 'Can you find me some butter chicken recipes?', data: [] },
-    // { role: 'ai', ...processAiOutput("Here are some butter chicken recipes I found:\n<FrontendCode type=\"showCard\" title=\"Butter Chicken\" site=\"recipetineats.com\" url=\"https://www.recipetineats.com/butter-chicken/\" summary=\"RECIPE VIDEO above. This is a Chef recipe and is one of the easiest Indian curries to make. The Butter Chicken Sauce is so good that you will want it on tap! Many restaurants take it over the top by adding copious amounts of ghee or butter into the sauce, but you'll find this rich enough as it is. And next time, try the streamlined One-Pan Baked Butter Chicken (readers are loving it!).\" />\n<FrontendCode type=\"showCard\" title=\"Butter Chicken\" site=\"budgetbytes.com\" url=\"https://www.budgetbytes.com/butter-chicken/\" summary=\"This homemade Butter Chicken recipe is rich, creamy, mild, and full of warm spices. Perfect for an easy weeknight dinner for the whole family!\" />\n<FrontendCode type=\"showCard\" title=\"Butter Chicken Recipe (Chicken Makhani) - Swasthi\\'s Recipes\" site=\"indianhealthyrecipes.com\" url=\"https://www.indianhealthyrecipes.com/butter-chicken/\" summary=\"Jun 18, 2024 ... Butter Chicken Recipe (Indian Chicken Makhani) ... Butter chicken is a popular Indian dish made with chicken, spices, tomatoes & cream. This ...\" />\n<FrontendCode type=\"showCard\" title=\"Butter Chicken - RecipeTin Eats\" site=\"recipetineats.com\" url=\"https://www.recipetineats.com/butter-chicken/\" summary=\"Jan 6, 2019 ... The BEST Butter Chicken recipe you will ever make! A chef recipe, easy to make and you can get all the ingredients at the grocery store!!\" />\n<FrontendCode type=\"showCard\" title=\"Butter Chicken - Little Sunny Kitchen\" site=\"littlesunnykitchen.com\" url=\"https://littlesunnykitchen.com/butter-chicken/\" summary=\"Jun 13, 2025 ... Butter Chicken Ingredients · Chicken – use skinless and boneless chicken breast or thighs for this recipe. · Oil, and butter – you will need oil ...\" />\n<FrontendCode type=\"showCard\" title=\"The Best Butter Chicken Recipe (Murgh Makhani) | Little Spice Jar\" site=\"littlespacejar.com\" url=\"https://littlespicejar.com/finger-lickin-butter-chicken-murgh-makhani/\" summary=\"Ingredients for Homemade Butter Chicken: Chicken: Feel free to use boneless skinless chicken breasts or boneless skinless chicken thighs for this recipe. I ...\" />\n<FrontendCode type=\"showCard\" title=\"Butter Chicken - Budget Bytes\" site=\"budgetbytes.com\" url=\"https://www.budgetbytes.com/butter-chicken/\" summary=\"May 6, 2025 ... This homemade Butter Chicken recipe is rich, creamy, mild, and full of warm spices. Perfect for an easy weeknight dinner for the whole ...\" />") }
+    // { role: 'ai', text: "Here are some butter chicken recipes I found:\n<FrontendCode type=\"showCard\" title=\"Butter Chicken\" site=\"recipetineats.com\" url=\"https://www.recipetineats.com/butter-chicken/\" summary=\"RECIPE VIDEO above. This is a Chef recipe and is one of the easiest Indian curries to make. The Butter Chicken Sauce is so good that you will want it on tap! Many restaurants take it over the top by adding copious amounts of ghee or butter into the sauce, but you'll find this rich enough as it is. And next time, try the streamlined One-Pan Baked Butter Chicken (readers are loving it!).\" />\n<FrontendCode type=\"showCard\" title=\"Butter Chicken\" site=\"budgetbytes.com\" url=\"https://www.budgetbytes.com/butter-chicken/\" summary=\"This homemade Butter Chicken recipe is rich, creamy, mild, and full of warm spices. Perfect for an easy weeknight dinner for the whole family!\" />\n<FrontendCode type=\"showCard\" title=\"Butter Chicken Recipe (Chicken Makhani) - Swasthi\\'s Recipes\" site=\"indianhealthyrecipes.com\" url=\"https://www.indianhealthyrecipes.com/butter-chicken/\" summary=\"Jun 18, 2024 ... Butter Chicken Recipe (Indian Chicken Makhani) ... Butter chicken is a popular Indian dish made with chicken, spices, tomatoes & cream. This ...\" />\n<FrontendCode type=\"showCard\" title=\"Butter Chicken - RecipeTin Eats\" site=\"recipetineats.com\" url=\"https://www.recipetineats.com/butter-chicken/\" summary=\"Jan 6, 2019 ... The BEST Butter Chicken recipe you will ever make! A chef recipe, easy to make and you can get all the ingredients at the grocery store!!\" />\n<FrontendCode type=\"showCard\" title=\"Butter Chicken - Little Sunny Kitchen\" site=\"littlesunnykitchen.com\" url=\"https://littlesunnykitchen.com/butter-chicken/\" summary=\"Jun 13, 2025 ... Butter Chicken Ingredients · Chicken – use skinless and boneless chicken breast or thighs for this recipe. · Oil, and butter – you will need oil ...\" />\n<FrontendCode type=\"showCard\" title=\"The Best Butter Chicken Recipe (Murgh Makhani) | Little Spice Jar\" site=\"littlespacejar.com\" url=\"https://littlespicejar.com/finger-lickin-butter-chicken-murgh-makhani/\" summary=\"Ingredients for Homemade Butter Chicken: Chicken: Feel free to use boneless skinless chicken breasts or boneless skinless chicken thighs for this recipe. I ...\" />\n<FrontendCode type=\"showCard\" title=\"Butter Chicken - Budget Bytes\" site=\"budgetbytes.com\" url=\"https://www.budgetbytes.com/butter-chicken/\" summary=\"May 6, 2025 ... This homemade Butter Chicken recipe is rich, creamy, mild, and full of warm spices. Perfect for an easy weeknight dinner for the whole ...\" />" },
+    // { role: 'error', text: 'Error getting response.' }
   ],
   context: {},
   isLoading: false,
   setSession: async (sessionId: string, isNew: boolean = false) => {
     if (get().sessionId === sessionId) return;
-    set({ sessionId, isLoading: true, history: [] })
+    set({ sessionId, isLoading: true, history: [] });
     if (isNew) return;
     const res = await getSessionInfo({ sessionId });
-    console.log(res.data.state);
     set({
       history: res.data.messages,
       chatState: res.data.state ?? {},
@@ -68,12 +70,27 @@ const useAiStore = create<AiChatStore>((set, get) => ({
         isLoading: false
       }));
     } catch (e) {
-      console.error(e);
+      let error = 'Error getting response.';
+      if (e instanceof FirebaseError && e.code === 'functions/permission-denied') {
+        console.error(e.code)
+        error = 'You are not logged in or you may be out of requests.';
+      }
       set((state) => ({
-        history: [...state.history, { role: 'ai', text: 'Error getting response', data: { type: 'text', content: 'Error getting response' } }],
-        isLoading: false
+        history: [...state.history, { role: 'error', text: error }],
+        isLoading: false,
       }));
     }
+  },
+  retryLastMessage: () => {
+    console.log('IN HERE');
+    const history = get().history;
+    if (history[history.length - 1].role !== 'error') {
+      console.warn('Last message was not an error, cannot retry');
+      return;
+    }
+    const userMessage = history[history.length - 2];
+    set((state) => ({ history: state.history.slice(0, -2) }));
+    get().submitChatMessage(userMessage.text!);
   },
   setChatStateProperty: (prop, newValue) => {
     set((state) => ({
@@ -83,8 +100,8 @@ const useAiStore = create<AiChatStore>((set, get) => ({
 }));
 
 
-export function useAiChat(): [history: AiChatStore['history'], getIsLoading: AiChatStore['isLoading'], chatState: AiChatStore['chatState'], submitChatMessage: AiChatStore['submitChatMessage'], startNewSession: () => void] {
-  const { history, isLoading, chatState, submitChatMessage, setSession } = useAiStore(state => state);
+export function useAiChat(): [history: AiChatStore['history'], getIsLoading: AiChatStore['isLoading'], chatState: AiChatStore['chatState'], submitChatMessage: AiChatStore['submitChatMessage'], startNewSession: () => void, retryLastMessage: () => void] {
+  const { history, isLoading, chatState, submitChatMessage, setSession, retryLastMessage } = useAiStore(state => state);
 
   const startNewSession = () => {
     const randomId = 'chatsess' + Math.random();
@@ -100,7 +117,7 @@ export function useAiChat(): [history: AiChatStore['history'], getIsLoading: AiC
     }
   }, []);
 
-  return [history, isLoading, chatState, submitChatMessage, startNewSession];
+  return [history, isLoading, chatState, submitChatMessage, startNewSession, retryLastMessage];
 }
 
 

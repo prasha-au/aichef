@@ -22,7 +22,7 @@ function AiChatMessage(props: any) {
 }
 
 export default function Chat(props: { additionalContext?: Record<string, unknown>}) {
-  const [history, isLoading, _chatState, submitChatMessage] = useAiChat();
+  const [history, isLoading, _chatState, submitChatMessage, , retryLastMessage] = useAiChat();
   const [requestedRedirect, setRequestedRedirect] = useAiChatState('requestedRedirect');
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -49,15 +49,22 @@ export default function Chat(props: { additionalContext?: Record<string, unknown
   return (
     <div className="chat container py-4">
       <div className="history mb-3" ref={historyRef}>
-        {history.map((msg, i) =>
-          msg.role === 'user' ? (
-            <div key={i} className="d-flex justify-content-end mb-2">
+        {history.map((msg, i) => {
+          if (msg.role === 'user') {
+            return <div key={i} className="d-flex justify-content-end mb-2">
               <div className="bg-secondary text-white rounded p-3 flex-grow-0" style={{maxWidth:'75%'}}>{msg.text}</div>
-            </div>
-          ) : (
-            <AiChatMessage key={i} {...msg} />
-          )
-        )}
+            </div>;
+          } else if (msg.role === 'ai') {
+            return <AiChatMessage key={i} {...msg} />
+          } else if (msg.role === 'error') {
+            return <div key={i} className="d-flex justify-content-end mb-2">
+              <div className="bg-danger text-white rounded p-3 flex-grow-0" style={{maxWidth:'75%'}}>
+                {msg.text}
+                <button className="btn btn-link text-white btn-sm ms-2" onClick={() => retryLastMessage()}>Retry</button>
+              </div>
+            </div>;
+          }
+        })}
         {isLoading && (
           <div className="d-flex mb-2">
             <div className="bg-light border rounded p-3 ms-2 flex-grow-1 opacity-50">Loading...</div>

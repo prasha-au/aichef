@@ -1,19 +1,20 @@
-import { isSignedIn, onCall, onCallGenkit } from "firebase-functions/https";
+import { onCall, onCallGenkit } from "firebase-functions/https";
 import { fetchRecipeFromUrlFlow, searchForRecipesFlow } from './flows/recipe-discovery';
 import { ai, firestore, genaiApiKey, googleCustomSearchCtx, googleCustomSearchKey } from './globals';
 import { ChatSessionStore } from './chat-session-store';
 import { chefAgent } from './flows/agent';
+import { isAuthenticatedAndHasRequests } from './auth';
 
 
 export const searchForRecipes = onCallGenkit({
   secrets: [genaiApiKey],
-  authPolicy: isSignedIn(),
+  authPolicy: isAuthenticatedAndHasRequests,
 }, searchForRecipesFlow);
 
 
 export const getRecipeFromUrl = onCallGenkit({
   secrets: [genaiApiKey],
-  authPolicy: isSignedIn(),
+  authPolicy: isAuthenticatedAndHasRequests,
   timeoutSeconds: 120,
 }, fetchRecipeFromUrlFlow);
 
@@ -28,8 +29,8 @@ function getSession(sessionId: string) {
 
 
 export const getSessionInfo = onCall({
-  authPolicy: isSignedIn(),
-}, async (req, res) => {
+  authPolicy: isAuthenticatedAndHasRequests,
+}, async (req) => {
   const { sessionId } = req.data;
   const session = await getSession(sessionId);
   const chat = session.chat(chefAgent);
@@ -46,7 +47,7 @@ export const getSessionInfo = onCall({
 
 export const queryReply = onCall({
   secrets: [genaiApiKey, googleCustomSearchKey, googleCustomSearchCtx],
-  authPolicy: isSignedIn(),
+  authPolicy: isAuthenticatedAndHasRequests,
 }, async (req) => {
   const { query, chatState, sessionId } = req.data;
 

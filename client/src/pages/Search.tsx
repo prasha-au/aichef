@@ -1,5 +1,4 @@
-import './Search.css';
-
+import './Search.scss';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import Chat from '../components/Chat';

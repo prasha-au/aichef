@@ -14,6 +14,7 @@ export const searchForRecipes = onCallGenkit({
 export const getRecipeFromUrl = onCallGenkit({
   secrets: [genaiApiKey],
   authPolicy: isSignedIn(),
+  timeoutSeconds: 120,
 }, fetchRecipeFromUrlFlow);
 
 

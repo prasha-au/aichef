@@ -1,4 +1,4 @@
-import './ChatView.css';
+import './ChatView.scss';
 import Chat from '../components/Chat';
 
 export default function ChatView() {

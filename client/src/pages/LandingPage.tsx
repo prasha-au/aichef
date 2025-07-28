@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import './LandingPage.css';
+import './LandingPage.scss';
 import { useAiChat } from '../ai-chat';
 
 function LandingPage() {

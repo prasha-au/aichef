@@ -1,4 +1,4 @@
-import './App.css';
+import './App.scss';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import ChatView from './pages/ChatView';

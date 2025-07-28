@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react';
 import { useAiChat, useAiChatState } from '../ai-chat';
-import './Chat.css';
+import './Chat.scss';
 import { useNavigate } from 'react-router-dom';
 import Markdown from 'react-markdown';
 

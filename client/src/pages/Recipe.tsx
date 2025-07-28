@@ -1,5 +1,5 @@
 
-import './Recipe.css';
+import './Recipe.scss';
 import { useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { getRecipeFromUrl, type Recipe } from '../firebase';

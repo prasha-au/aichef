@@ -65,7 +65,7 @@ export const getRecipeFromUrlTool = ai.defineTool(
     }
     const webContentRaw = await webResult.text();
     const $ = cheerio.load(webContentRaw);
-    const recipeContent = $('.wprm-recipe').first().html() ?? $('[itemType="http://schema.org/Recipe"]').html() ?? $('main').html() ?? $('#main').html() ?? '';
+    const recipeContent = $('.wprm-recipe-container').html() ?? $('[itemType="http://schema.org/Recipe"]').html() ?? $('main').html() ?? $('#main').html() ?? '';
     if (!recipeContent) {
       throw new Error(`Could not select recipe content from ${simpleUrl}.`);
     }

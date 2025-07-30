@@ -26,7 +26,13 @@ export default function Search() {
         <div className="row h-100" style={{gap:'2rem'}}>
           <div className="col d-flex flex-column" style={{minWidth:0}}>
             <div className="search-results flex-grow-1 overflow-auto d-flex flex-column mt-3">
-              {results === undefined && <div>Loading...</div>}
+              {results === undefined && (
+                <div className="d-flex justify-content-center align-items-center" style={{height: '100%'}}>
+                  <div className="spinner-border spinner-border-lg text-primary" role="status" style={{width: '5rem', height: '5rem'}}>
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                </div>
+              )}
               {(results ?? []).map((r, i) => (
                 <div
                   className="search-result card bg-dark text-white mb-3 p-3 border-secondary"
@@ -34,7 +40,13 @@ export default function Search() {
                   style={{ cursor: 'pointer' }}
                   onClick={() => navigate(`/recipe?url=${encodeURIComponent(r.url)}`)}
                 >
-                  <div className="title h5 mb-1">{r.title} <small className="url text-secondary">{r.url}</small></div>
+                  <div className="title h5 mb-1">
+                    {r.title}
+                    <small className="url text-secondary ms-2">{r.url}</small>
+                    <span className="ms-2 badge bg-secondary text-dark">
+                      {r.source === 'saved' ? 'Saved' : 'Web'}
+                    </span>
+                  </div>
                   <div className="summary text-light small">{r.summary}</div>
                 </div>
               ))}

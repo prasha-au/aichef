@@ -1,5 +1,5 @@
 import {z} from "genkit/beta";
-import { gemini, gemini20FlashLite } from '@genkit-ai/googleai';
+import { gemini, gemini20FlashLite, gemini25FlashPreview0417 } from '@genkit-ai/googleai';
 import { retriever, ai, googleCustomSearchKey, googleCustomSearchCtx, recipeIndexConfig, firestore } from '../globals';
 import * as cheerio from 'cheerio';
 import { IngredientSchema, RecipeSchema, RecipeSearchResultsSchema } from '../schemas';
@@ -137,7 +137,7 @@ const searchWebForRecipesTool = ai.defineTool({
     key: googleCustomSearchKey.value(),
     cx: googleCustomSearchCtx.value(),
     exactTerms: 'recipe',
-    num: input.limit.toString(),
+    num: input.limit?.toString() ?? '10',
     safe: 'active',
     q: input.query,
   })
@@ -145,17 +145,18 @@ const searchWebForRecipesTool = ai.defineTool({
   const webResponse = await (await fetch(url.toString())).json();
 
   const response = await ai.generate({
-    model: gemini20FlashLite,
+    model: gemini('gemini-2.5-flash-lite'),
     system: `
       You are a search results parser for recipes.
       Your only task is to parse raw search results from the Google Custom Search API and return a list of recipe search results.
       You **MUST** follow the rules below:
       - Exclude any results that have irrelevant data.
-      - Exclude any social media sites like Facebook, Instagram, etc.
-      - Remove the website name from the title.
-      - Edit the summary so it is a couple of concise sentences.
-      - Use the og:description tag for the summary if it exists and is relevant.
       - Exclude any results that fail to parse.
+      - Exclude any social media sites like Facebook, Instagram, TikTok, etc.
+      - Remove the website name from the title.
+      - Use the og:description tag for the summary if it exists and is relevant.
+      - Edit the summary so it is a couple of concise sentences.
+      - Edit the summary to remove any references to items on the page (eg. "Video above" or "See below").
       - Set the source field to 'web' for all results.
     `,
     prompt: JSON.stringify({ query: input.query, results: webResponse.items }),
@@ -190,7 +191,6 @@ const searchDatabaseForRecipesTool = ai.defineTool({
 
 
 
-
 export const searchForRecipesFlow = ai.defineFlow({
   name: 'searchForRecipesFlow',
   inputSchema: z.object({
@@ -199,17 +199,29 @@ export const searchForRecipesFlow = ai.defineFlow({
   outputSchema: z.array(RecipeSearchResultsSchema),
 }, async (input) => {
 
-  const response = await ai.generate({
-    system: `
-      You are a recipe search engine. You will ONLY return data from the tools provided and not search for or create any new items.
+  const data = (await Promise.all([
+    searchWebForRecipesTool({ query: input.query, limit: 10 }),
+    searchDatabaseForRecipesTool({ query: input.query, limit: 10 }),
+  ])).flat();
 
-      Order the values based on relevance to the query but prefer saved recipes in the database if relevant.
-      Reply with an ordered list of recipes aiming for 10 items with both web and saved recipes.
+  const response = await ai.generate({
+    model: gemini('gemini-2.5-flash-lite'),
+    system: `
+      Your **ONLY** job is to follow the steps below to filter and sort a list of recipes.
+      1. Remove any duplicate results using URL as the main indicator.
+      2. Order the items based on relevance to the query.
+      3. Remove any items that are not relevant to the query (eg. "beef massaman" when the query is "chicken curry").
+      4. Return the results as an array of RecipeSearchResultsSchema objects.
     `,
-    prompt: input.query,
-    tools: [searchWebForRecipesTool, searchDatabaseForRecipesTool],
+    prompt: `
+    User query (text): """${input.query}"""
+    Search results (JSON):
+    """
+    ${JSON.stringify(data)}
+    """
+    `,
     output: { schema: z.array(RecipeSearchResultsSchema) },
-    config: { temperature: 0.0 },
+    config: { temperature: 0.0, topP: 0, seed: 0, thinkingConfig: { thinkingBudget: 0} },
   });
 
   return response.output!;
